@@ -170,8 +170,11 @@ export const VerificationPage: React.FC = () => {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={res.status === 'PASS' ? 'success' : 'destructive'} className="text-[10px]">
-                      {res.status}
+                    <Badge
+                      variant={res.status === 'PASS' ? 'success' : res.isDrift ? 'warning' : 'destructive'}
+                      className="text-[10px]"
+                    >
+                      {res.status === 'PASS' ? 'PASS' : res.isDrift ? 'DRIFT ISOLATED' : 'FAIL'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right text-zinc-400 text-xs font-mono">

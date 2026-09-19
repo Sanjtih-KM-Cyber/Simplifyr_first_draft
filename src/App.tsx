@@ -10,32 +10,39 @@ import { DashboardPage } from './components/pages/DashboardPage.tsx';
 import { SourcesPage } from './components/pages/SourcesPage.tsx';
 import { EventsPage } from './components/pages/EventsPage.tsx';
 import { DriftPage } from './components/pages/DriftPage.tsx';
-import { MappingsPage } from './components/pages/MappingsPage.tsx';
-import { WorkbenchPage } from './components/pages/WorkbenchPage.tsx';
-import { VerificationPage } from './components/pages/VerificationPage.tsx';
+import { OutputProfilesPage } from './components/pages/OutputProfilesPage.tsx';
+import { DirectIngestPage } from './components/pages/DirectIngestPage.tsx';
 import { SettingsPage } from './components/pages/SettingsPage.tsx';
+import { VerificationModal } from './components/common/VerificationModal.tsx';
 import { QuickActionPalette } from './components/common/QuickActionPalette.tsx';
 import { KeyboardShortcutsModal } from './components/common/KeyboardShortcutsModal.tsx';
-import { InspectorDock } from './components/layout/InspectorDock.tsx';
-import { ProcessedStreamEvent, QuarantinedEvent } from './types.ts';
-import { streamSimulator } from './services/streamSimulator.ts';
+import { IngestLogsModal } from './components/common/IngestLogsModal.tsx';
+import { ProcessedStreamEvent } from './types.ts';
+import { streamSimulator, processRawEventThroughPipeline } from './services/streamSimulator.ts';
 import { quarantineManager } from './services/quarantineManager.ts';
+import { GOLDEN_CORPUS } from './data/goldenCorpus.ts';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<string>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
+  const [isIngestModalOpen, setIsIngestModalOpen] = useState<boolean>(false);
+  const [isVerificationOpen, setIsVerificationOpen] = useState<boolean>(false);
   const [workbenchPayload, setWorkbenchPayload] = useState<string | undefined>(undefined);
   const [quarantinedCount, setQuarantinedCount] = useState<number>(0);
 
-  // Concept A: Collapsible Inspector Dock State
-  const [isDockOpen, setIsDockOpen] = useState<boolean>(false);
-  const [selectedEvent, setSelectedEvent] = useState<ProcessedStreamEvent | null>(null);
-  const [selectedQuarantineItem, setSelectedQuarantineItem] = useState<QuarantinedEvent | null>(null);
-
-  // Live Stream & Events State (Clean unmocked state, populated via live stream or real ingestion)
-  const [events, setEvents] = useState<ProcessedStreamEvent[]>([]);
+  // Live Stream & Events State (Populated with real pipeline-processed events)
+  const [events, setEvents] = useState<ProcessedStreamEvent[]>(() => {
+    return [
+      GOLDEN_CORPUS[0]?.raw,
+      GOLDEN_CORPUS[1]?.raw,
+      GOLDEN_CORPUS[2]?.raw,
+      GOLDEN_CORPUS[3]?.raw,
+    ]
+      .filter(Boolean)
+      .map((raw) => processRawEventThroughPipeline(raw));
+  });
   const [isStreamRunning, setIsStreamRunning] = useState<boolean>(false);
   const [latencies, setLatencies] = useState<number[]>([
     0.16, 0.19, 0.14, 0.22, 0.18, 0.15, 0.21, 0.17,
@@ -58,15 +65,15 @@ export default function App() {
   // Hook into stream simulator
   useEffect(() => {
     streamSimulator.setCallback((newEvent: ProcessedStreamEvent) => {
-      setEvents((prev) => {
-        if (prev.some((e) => e.id === newEvent.id)) return prev;
-        return [newEvent, ...prev.slice(0, 199)];
-      });
-      setLatencies((prev) => [...prev.slice(-19), newEvent.latencyMs]);
+      setEvents((prev) => [newEvent, ...prev].slice(0, 300));
+      setLatencies((prev) => [
+        newEvent.latencyMs,
+        ...prev.slice(0, 19),
+      ]);
     });
 
     return () => {
-      streamSimulator.stop();
+      streamSimulator.setCallback(() => {});
     };
   }, []);
 
@@ -81,40 +88,30 @@ export default function App() {
   };
 
   const handleInjectPulse = () => {
-    // streamSimulator.pulse() automatically invokes onEventCallback
-    streamSimulator.pulse();
+    const ev = streamSimulator.pulse();
+    setEvents((prev) => [ev, ...prev].slice(0, 300));
   };
 
-  const handleInjectSample = (sampleRaw: string) => {
-    setWorkbenchPayload(sampleRaw);
-    setCurrentRoute('workbench');
+  const handleInjectSample = (raw: string) => {
+    setWorkbenchPayload(raw);
+    setCurrentRoute('sources');
   };
 
-  const handleSelectEvent = (ev: ProcessedStreamEvent) => {
-    setSelectedEvent(ev);
-    const qItem = quarantineManager.get(ev.id);
-    setSelectedQuarantineItem(qItem || null);
-    setIsDockOpen(true);
-  };
-
-  const handleEventUpdated = (updatedEv: ProcessedStreamEvent) => {
-    setEvents((prev) =>
-      prev.map((e) => (e.id === updatedEv.id ? updatedEv : e))
-    );
-    setSelectedEvent(updatedEv);
-    const qItem = quarantineManager.get(updatedEv.id);
-    setSelectedQuarantineItem(qItem || null);
-  };
-
-  // Keyboard navigation
+  // Global Keyboard Shortcuts (Section 64)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
+      const target = e.target as HTMLElement;
       const isInput =
-        activeEl &&
-        (activeEl.tagName === 'INPUT' ||
-          activeEl.tagName === 'TEXTAREA' ||
-          (activeEl as HTMLElement).isContentEditable);
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      // Space to toggle stream (when not typing in an input)
+      if (e.code === 'Space' && !isInput) {
+        e.preventDefault();
+        handleToggleStream();
+        return;
+      }
 
       // Cmd+K / Ctrl+K
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -133,8 +130,8 @@ export default function App() {
           setIsShortcutsOpen(false);
           return;
         }
-        if (isDockOpen) {
-          setIsDockOpen(false);
+        if (isVerificationOpen) {
+          setIsVerificationOpen(false);
           return;
         }
       }
@@ -146,22 +143,14 @@ export default function App() {
         '2': 'sources',
         '3': 'events',
         '4': 'drift',
-        '5': 'mappings',
-        '6': 'workbench',
-        '7': 'verification',
-        '8': 'settings',
+        '5': 'outputs',
+        s: 'settings',
+        S: 'settings',
       };
 
       if (keyRouteMap[e.key]) {
         e.preventDefault();
         setCurrentRoute(keyRouteMap[e.key]);
-      } else if (e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        if (!isDockOpen && !selectedEvent && events.length > 0) {
-          handleSelectEvent(events[0]);
-        } else {
-          setIsDockOpen((prev) => !prev);
-        }
       } else if (e.key === '?') {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
@@ -170,17 +159,18 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPaletteOpen, isShortcutsOpen]);
+  }, [isPaletteOpen, isShortcutsOpen, isVerificationOpen]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased flex">
-      {/* Fixed Left Sidebar */}
+      {/* Fixed Left Sidebar with 5 Core Pipeline Steps */}
       <Sidebar
         currentRoute={currentRoute}
         onNavigate={setCurrentRoute}
         quarantinedCount={quarantinedCount}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onOpenVerification={() => setIsVerificationOpen(true)}
       />
 
       {/* Main App Canvas */}
@@ -191,42 +181,54 @@ export default function App() {
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenCommandPalette={() => setIsPaletteOpen(true)}
-          onInjectPulse={handleInjectPulse}
-          isStreamRunning={isStreamRunning}
-          onToggleStream={handleToggleStream}
+          onOpenIngestModal={() => setIsIngestModalOpen(true)}
           quarantinedCount={quarantinedCount}
-          isDockOpen={isDockOpen}
-          onToggleDock={() => {
-            if (!isDockOpen && !selectedEvent && events.length > 0) {
-              handleSelectEvent(events[0]);
-            } else {
-              setIsDockOpen((prev) => !prev);
-            }
-          }}
-          hasSelectedEvent={!!selectedEvent}
         />
 
-        {/* Uncluttered Page Content */}
+        {/* Clean, Focused Pipeline Content */}
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
           {currentRoute === 'dashboard' && (
             <DashboardPage
               onNavigate={setCurrentRoute}
               onInjectSample={handleInjectSample}
-              totalEvents={events.length + 84210}
+              onOpenVerification={() => setIsVerificationOpen(true)}
+              totalEvents={events.length}
               avgLatencyMs={avgLatencyMs}
               losslessRatePct={100}
             />
           )}
 
-          {currentRoute === 'sources' && (
-            <SourcesPage onTestSampleInWorkbench={handleInjectSample} />
+          {currentRoute === 'ingest' && (
+            <DirectIngestPage
+              onEventsIngested={(newEvents) => {
+                setEvents((prev) => {
+                  const existingIds = new Set(prev.map((e) => e.id));
+                  const uniqueNew: ProcessedStreamEvent[] = [];
+                  for (const ev of newEvents) {
+                    if (!existingIds.has(ev.id)) {
+                      existingIds.add(ev.id);
+                      uniqueNew.push(ev);
+                    }
+                  }
+                  return [...uniqueNew, ...prev].slice(0, 299);
+                });
+              }}
+              isStreamRunning={isStreamRunning}
+              onToggleStream={handleToggleStream}
+              onNavigate={setCurrentRoute}
+            />
+          )}
+
+          {(currentRoute === 'sources' || currentRoute === 'workbench') && (
+            <SourcesPage
+              initialWorkbenchPayload={workbenchPayload}
+              onOpenVerification={() => setIsVerificationOpen(true)}
+            />
           )}
 
           {currentRoute === 'events' && (
             <EventsPage
               events={events}
-              onSelectEvent={handleSelectEvent}
-              selectedEventId={selectedEvent?.id}
               isStreamRunning={isStreamRunning}
               onToggleStream={handleToggleStream}
               onInjectSingleEvent={handleInjectPulse}
@@ -242,30 +244,22 @@ export default function App() {
                   }
                   return [...uniqueNew, ...prev].slice(0, 299);
                 });
-                if (newEvents.length > 0 && !selectedEvent) {
-                  handleSelectEvent(newEvents[0]);
-                }
               }}
             />
           )}
 
           {currentRoute === 'drift' && (
             <DriftPage
-              onInspectInDock={(item) => {
-                setSelectedEvent(item.event);
-                setSelectedQuarantineItem(item);
-                setIsDockOpen(true);
+              onNavigateToWorkbench={(sample) => {
+                setWorkbenchPayload(sample);
+                setCurrentRoute('sources');
               }}
             />
           )}
 
-          {currentRoute === 'mappings' && <MappingsPage />}
-
-          {currentRoute === 'workbench' && (
-            <WorkbenchPage initialPayload={workbenchPayload} />
+          {(currentRoute === 'outputs' || currentRoute === 'mappings') && (
+            <OutputProfilesPage />
           )}
-
-          {currentRoute === 'verification' && <VerificationPage />}
 
           {currentRoute === 'settings' && <SettingsPage />}
         </main>
@@ -277,13 +271,6 @@ export default function App() {
         onClose={() => setIsPaletteOpen(false)}
         onNavigate={setCurrentRoute}
         onSelectSample={handleInjectSample}
-        onToggleDock={() => {
-          if (!isDockOpen && !selectedEvent && events.length > 0) {
-            handleSelectEvent(events[0]);
-          } else {
-            setIsDockOpen((prev) => !prev);
-          }
-        }}
       />
 
       <KeyboardShortcutsModal
@@ -291,17 +278,27 @@ export default function App() {
         onClose={() => setIsShortcutsOpen(false)}
       />
 
-      {/* Concept A: Collapsible Inspector Dock */}
-      <InspectorDock
-        isOpen={isDockOpen}
-        onClose={() => setIsDockOpen(false)}
-        selectedEvent={selectedEvent}
-        quarantinedItem={selectedQuarantineItem}
-        onNavigateToWorkbench={(raw) => {
-          handleInjectSample(raw);
-          setIsDockOpen(false);
+      <IngestLogsModal
+        isOpen={isIngestModalOpen}
+        onClose={() => setIsIngestModalOpen(false)}
+        onEventsIngested={(newEvents: ProcessedStreamEvent[]) => {
+          setEvents((prev) => {
+            const existingIds = new Set(prev.map((e) => e.id));
+            const uniqueNew: ProcessedStreamEvent[] = [];
+            for (const ev of newEvents) {
+              if (!existingIds.has(ev.id)) {
+                existingIds.add(ev.id);
+                uniqueNew.push(ev);
+              }
+            }
+            return [...uniqueNew, ...prev].slice(0, 299);
+          });
         }}
-        onEventUpdated={handleEventUpdated}
+      />
+
+      <VerificationModal
+        isOpen={isVerificationOpen}
+        onClose={() => setIsVerificationOpen(false)}
       />
     </div>
   );

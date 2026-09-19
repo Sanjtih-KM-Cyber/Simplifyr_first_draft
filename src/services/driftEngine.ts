@@ -361,11 +361,11 @@ Return pure JSON with:
       unmappedKeys: novelKeys,
     });
 
-    // Attempt live server-side AI API call (Ollama / Groq / Gemini)
+    // Attempt live server-side AI API call (Local Ollama first, with Gemini/Groq as fallbacks)
     try {
-      const storedEngine = localStorage.getItem('simplifyr_ai_engine') || 'gemini';
-      const storedOllamaHost = localStorage.getItem('simplifyr_ollama_host') || '';
-      const storedOllamaModel = localStorage.getItem('simplifyr_ollama_model') || '';
+      const storedEngine = localStorage.getItem('simplifyr_ai_engine') || 'ollama';
+      const storedOllamaHost = localStorage.getItem('simplifyr_ollama_host') || 'http://localhost:11434';
+      const storedOllamaModel = localStorage.getItem('simplifyr_ollama_model') || 'mistral';
       const storedGroqKey = localStorage.getItem('simplifyr_groq_key') || '';
 
       const response = await fetch('/api/ai/drift-analysis', {

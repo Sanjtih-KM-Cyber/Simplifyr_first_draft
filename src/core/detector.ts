@@ -63,6 +63,11 @@ export function detectLogFormatAndVendor(raw: string): DetectionResult {
         formatConfidence = 0.95;
         indicators.push('Syslog RFC 3164 format with PRI & BSD timestamp');
       }
+    } else if (clean.match(/^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}/)) {
+      // BSD Syslog format without PRI header
+      format = 'syslog_rfc3164';
+      formatConfidence = 0.93;
+      indicators.push('Syslog RFC 3164 standard BSD timestamp header');
     } else if (clean.includes('=') && (clean.includes(' ') || clean.includes(';'))) {
       format = 'keyvalue';
       formatConfidence = 0.9;
@@ -145,20 +150,23 @@ export function detectLogFormatAndVendor(raw: string): DetectionResult {
     eventFamily = 'Intrusion Detection Alert';
     indicators.push('Snort fast-alert rule header format [**] [GID:SID:REV]');
   }
-  // Generic Firewall
+  // Generic Firewall / Cloud Gateway
   else if (
     clean.includes('src=') ||
     clean.includes('srcip=') ||
     clean.includes('dst=') ||
     clean.includes('dstip=') ||
     clean.includes('action=') ||
-    clean.includes('proto=')
+    clean.includes('proto=') ||
+    clean.includes('"src_ip"') ||
+    clean.includes('"dst_ip"') ||
+    clean.includes('"device_id"')
   ) {
     vendor = 'generic_firewall';
     vendorConfidence = 0.88;
     deviceProduct = 'Generic Perimeter Firewall';
     eventFamily = 'Firewall Traffic';
-    indicators.push('Standard IP perimeter parameters (src, dst, proto, action)');
+    indicators.push('Standard IP perimeter parameters (src, dst, proto, action, or cloud connection payload)');
   }
 
   return {

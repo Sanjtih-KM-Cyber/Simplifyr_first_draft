@@ -6,11 +6,46 @@
 import { CanonicalSemanticEvent, OutputProfile } from '../types.ts';
 
 export const PRESET_OUTPUT_PROFILES: OutputProfile[] = [
-  // 1. SOC Incident Investigation
+  // 1. SOC Alert Triage (Tier 1)
+  {
+    id: 'soc_triage',
+    name: 'SOC Alert Triage (Tier 1)',
+    description: 'High-signal analyst view for rapid disposition: verdict, threat severity, alert signature, and 5-tuple.',
+    is_preset: true,
+    format: 'json',
+    fields_to_include: [
+      'timestamp',
+      'network.action',
+      'threat.severity',
+      'threat.signature',
+      'source.ip',
+      'source.port',
+      'destination.ip',
+      'destination.port',
+      'network.protocol',
+      'device.product',
+      'device.hostname',
+    ],
+    key_rename_map: {
+      'timestamp': 'timestamp',
+      'network.action': 'verdict',
+      'threat.severity': 'severity',
+      'threat.signature': 'alert_signature',
+      'source.ip': 'src_ip',
+      'source.port': 'src_port',
+      'destination.ip': 'dst_ip',
+      'destination.port': 'dst_port',
+      'network.protocol': 'protocol',
+      'device.product': 'device_product',
+      'device.hostname': 'device_host',
+    },
+  },
+
+  // 2. SOC Incident Investigation & Deep Hunt (Tier 2/3)
   {
     id: 'soc_investigation',
-    name: 'SOC Incident Investigation',
-    description: 'Prioritized for threat hunting: severity, action, source/dest IPs, alert signature, and tamper-proof hash.',
+    name: 'SOC Incident Response & Deep Hunt',
+    description: 'Deep investigative context: full session tracking, NAT translations, threat metadata, and cryptographic SHA-256 seal.',
     is_preset: true,
     format: 'json',
     fields_to_include: [
@@ -20,10 +55,18 @@ export const PRESET_OUTPUT_PROFILES: OutputProfile[] = [
       'threat.signature',
       'network.action',
       'network.protocol',
+      'network.application',
+      'network.session_id',
       'source.ip',
       'source.port',
+      'source.zone',
+      'source.nat_ip',
+      'source.nat_port',
       'destination.ip',
       'destination.port',
+      'destination.zone',
+      'network.bytes_in',
+      'network.bytes_out',
       'device.vendor',
       'device.product',
       'device.hostname',
@@ -41,66 +84,42 @@ export const PRESET_OUTPUT_PROFILES: OutputProfile[] = [
     },
   },
 
-  // 2. Network Operations & Telemetry
+  // 3. SOC Threat Intel & IOC Matching
   {
-    id: 'netops_telemetry',
-    name: 'Network Operations Telemetry',
-    description: 'Bandwidth, session tracking, NAT translations, ports, and interface routing.',
+    id: 'soc_threat_intel',
+    name: 'SOC Threat Intel & IOC Matching',
+    description: 'Extracted network observables and indicators for TIP/MISP/OpenCTI correlation and threat hunting.',
     is_preset: true,
     format: 'json',
     fields_to_include: [
       'timestamp',
-      'device.hostname',
       'source.ip',
-      'source.port',
-      'source.zone',
-      'source.nat_ip',
-      'source.nat_port',
       'destination.ip',
       'destination.port',
-      'destination.zone',
+      'network.application',
       'network.protocol',
+      'threat.severity',
+      'threat.signature',
       'network.action',
-      'network.session_id',
-      'network.bytes_in',
-      'network.bytes_out',
-      'network.packets',
-      'network.application',
+      'device.hostname',
+      'metadata.sha256_hash',
     ],
-    key_rename_map: {},
+    key_rename_map: {
+      'source.ip': 'observable_src_ip',
+      'destination.ip': 'observable_dst_ip',
+      'destination.port': 'observable_port',
+      'network.application': 'observable_app',
+      'threat.signature': 'matched_ioc',
+      'network.action': 'enforcement_verdict',
+      'metadata.sha256_hash': 'source_evidence_sha256',
+    },
   },
 
-  // 3. Enterprise SIEM Ingestion (ECS-aligned)
+  // 4. SOC AI/ML Anomaly Feature Vector
   {
-    id: 'siem_ingest_ecs',
-    name: 'Enterprise SIEM Ingest (ECS)',
-    description: 'Conforms to Elastic Common Schema / Open Cybersecurity Schema Framework (OCSF) taxonomy.',
-    is_preset: true,
-    format: 'json',
-    fields_to_include: [
-      '@timestamp',
-      'event.id',
-      'event.action',
-      'event.outcome',
-      'source.ip',
-      'source.port',
-      'destination.ip',
-      'destination.port',
-      'network.transport',
-      'network.application',
-      'observer.vendor',
-      'observer.product',
-      'observer.version',
-      'log.syslog.severity.name',
-    ],
-    key_rename_map: {},
-  },
-
-  // 4. Analytics & Machine Learning Feature Vector
-  {
-    id: 'analytics_ml_vector',
-    name: 'ML Anomaly Feature Vector',
-    description: 'Flat numerical and categorical feature vector suitable for isolation forests and anomaly detection.',
+    id: 'soc_ml_analytics',
+    name: 'SOC AI/ML Behavioral Anomaly Vector',
+    description: 'Flat numerical and categorical feature vector optimized for isolation forests, clustering, and behavioral ML models.',
     is_preset: true,
     format: 'flat_json',
     fields_to_include: [
@@ -116,6 +135,37 @@ export const PRESET_OUTPUT_PROFILES: OutputProfile[] = [
     ],
     key_rename_map: {},
   },
+
+  // 5. SOC Audit & Legal Non-Repudiation
+  {
+    id: 'soc_compliance_audit',
+    name: 'SOC Compliance & Legal Non-Repudiation',
+    description: 'Preserves 100% cryptographic lineage, normalized UTC timestamps, observer identity, and original SHA-256 seal for audit/court compliance.',
+    is_preset: true,
+    format: 'json',
+    fields_to_include: [
+      'event_id',
+      'timestamp',
+      'device.vendor',
+      'device.product',
+      'device.version',
+      'device.hostname',
+      'network.action',
+      'source.ip',
+      'destination.ip',
+      'metadata.sha256_hash',
+    ],
+    key_rename_map: {
+      'event_id': 'audit_record_uuid',
+      'timestamp': 'certified_utc_timestamp',
+      'device.vendor': 'sensor_vendor',
+      'device.product': 'sensor_product',
+      'device.version': 'sensor_firmware',
+      'device.hostname': 'sensor_hostname',
+      'network.action': 'sensor_decision',
+      'metadata.sha256_hash': 'cryptographic_sha256_wire_seal',
+    },
+  },
 ];
 
 /**
@@ -127,8 +177,8 @@ export function projectEvent(
   profile: OutputProfile,
   extraContext?: { sha256_hash?: string }
 ): Record<string, unknown> {
-  // If flat ML feature vector
-  if (profile.format === 'flat_json' || profile.id === 'analytics_ml_vector') {
+  // If flat ML feature vector (SOC Anomaly / ML Analytics)
+  if (profile.format === 'flat_json' || profile.id === 'soc_ml_analytics' || profile.id === 'analytics_ml_vector') {
     const protoMap: Record<string, number> = { TCP: 6, UDP: 17, ICMP: 1, GRE: 47, OTHER: 0 };
     const date = new Date(canonical.timestamp);
     const hour = Number.isNaN(date.getHours()) ? 12 : date.getHours();
@@ -143,41 +193,6 @@ export function projectEvent(
       is_threat: canonical.threat ? 1 : 0,
       bytes_transferred: (canonical.network.bytes_in || 0) + (canonical.network.bytes_out || 0),
       hour_of_day: hour,
-    };
-  }
-
-  // If ECS SIEM format
-  if (profile.id === 'siem_ingest_ecs') {
-    return {
-      '@timestamp': canonical.timestamp,
-      event: {
-        id: canonical.event_id,
-        action: canonical.network.action.toLowerCase(),
-        outcome: canonical.network.action === 'ALLOWED' ? 'success' : 'failure',
-      },
-      source: {
-        ip: canonical.source.ip || null,
-        port: canonical.source.port || null,
-      },
-      destination: {
-        ip: canonical.destination.ip || null,
-        port: canonical.destination.port || null,
-      },
-      network: {
-        transport: canonical.network.protocol.toLowerCase(),
-        application: canonical.network.application || null,
-      },
-      observer: {
-        vendor: canonical.device.vendor,
-        product: canonical.device.product,
-        version: canonical.device.version,
-      },
-      threat: canonical.threat
-        ? {
-            severity: canonical.threat.severity,
-            name: canonical.threat.signature || null,
-          }
-        : undefined,
     };
   }
 

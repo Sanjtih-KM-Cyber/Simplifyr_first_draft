@@ -19,26 +19,23 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
 
   const shortcuts = [
     {
-      category: 'Workspace Navigation',
+      category: 'Pipeline Navigation',
       items: [
         { key: '1', description: 'Dashboard' },
-        { key: '2', description: 'Perimeter Sources' },
-        { key: '3', description: 'Event Explorer & Stream' },
-        { key: '4', description: 'Drift & Quarantine Chamber' },
-        { key: '5', description: 'Field Mappings & Knowledge' },
-        { key: '6', description: 'Normalizer Workbench' },
-        { key: '7', description: 'Golden Verification' },
-        { key: '8', description: 'System Settings' },
+        { key: '2', description: 'Sources & Onboarding' },
+        { key: '3', description: 'Event Explorer' },
+        { key: '4', description: 'Schema Drift & AI' },
+        { key: '5', description: 'Output Profiles & Mappings' },
+        { key: 'S', description: 'System Settings' },
       ],
     },
     {
       category: 'Operational Controls',
       items: [
         { key: '⌘ + K / Ctrl + K', description: 'Open Quick Action Command Palette' },
-        { key: 'i', description: 'Toggle Collapsible Inspector Dock (Concept A)' },
         { key: 'Space', description: 'Pause / Resume Stream Ingestion' },
         { key: '?', description: 'Open this Keyboard Shortcuts Guide' },
-        { key: 'Esc', description: 'Dismiss Inspector Dock, drawers, or modals' },
+        { key: 'Esc', description: 'Dismiss active modals or drawers' },
       ],
     },
   ];

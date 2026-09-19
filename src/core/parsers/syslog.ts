@@ -74,28 +74,48 @@ export function parseSyslog(raw: string, eventId: string): ParsedEvent {
   }
 
   // 4. Cisco ASA Specific Pattern: %ASA-level-id: ...
-  const asaMatch = msgBody.match(/%ASA-(\d)-(\d+):\s*(.*)/i);
+  const rawOrTag = `${header.app_name || ''} ${msgBody}`;
+  const asaMatch = rawOrTag.match(/%ASA-(\d)-(\d+):?\s*(.*)/i);
   if (asaMatch) {
     fields['cisco.asa_level'] = parseInt(asaMatch[1], 10);
     fields['cisco.message_id'] = `ASA-${asaMatch[1]}-${asaMatch[2]}`;
     fields['cisco.message_code'] = asaMatch[2];
-    msgBody = asaMatch[3];
+    if (asaMatch[3]) {
+      msgBody = asaMatch[3];
+    }
+  }
 
-    // Check for standard ASA connection strings:
-    // Built {inbound|outbound} TCP connection 1234 for outside:198.51.100.1/443 (198.51.100.1/443) to inside:10.0.0.5/51234
-    const connMatch = msgBody.match(
-      /(Built|Teardown|Denied)\s+(?:inbound|outbound)?\s*(\w+)\s+connection\s+(\d+)\s+for\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)\s*(?:\([^)]+\))?\s+to\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)/i
+  // Check for standard ASA connection strings:
+  // e.g., Built outbound TCP connection 9841221 for outside:198.51.100.24/443 (198.51.100.24/443) to inside:10.10.4.12/54210 (10.10.4.12/54210)
+  const connMatch = msgBody.match(
+    /(Built|Teardown|Denied|Deny)\s+(?:inbound|outbound)?\s*(\w+)?\s*connection\s+(\d+)\s+for\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)\s*(?:\([^)]+\))?\s+to\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)/i
+  );
+  if (connMatch) {
+    const act = connMatch[1].toLowerCase();
+    fields['action'] = (act === 'denied' || act === 'deny') ? 'DENY' : 'ALLOW';
+    if (connMatch[2]) fields['proto'] = connMatch[2];
+    fields['connection_id'] = connMatch[3];
+    fields['src_zone'] = connMatch[4];
+    fields['src_ip'] = connMatch[5];
+    fields['src_port'] = parseInt(connMatch[6], 10);
+    fields['dst_zone'] = connMatch[7];
+    fields['dst_ip'] = connMatch[8];
+    fields['dst_port'] = parseInt(connMatch[9], 10);
+  } else {
+    // Alternative ASA pattern: Deny tcp src outside:198.51.100.24/443 dst inside:10.10.4.12/54210
+    const denyMatch = msgBody.match(
+      /(Deny|Denied|Permit|Allowed)\s+(\w+)\s+src\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)\s+dst\s+([a-zA-Z0-9_-]+):([0-9.]+)\/(\d+)/i
     );
-    if (connMatch) {
-      fields['action'] = connMatch[1].toLowerCase() === 'denied' ? 'DENY' : 'ALLOW';
-      fields['proto'] = connMatch[2];
-      fields['connection_id'] = connMatch[3];
-      fields['src_zone'] = connMatch[4];
-      fields['src_ip'] = connMatch[5];
-      fields['src_port'] = parseInt(connMatch[6], 10);
-      fields['dst_zone'] = connMatch[7];
-      fields['dst_ip'] = connMatch[8];
-      fields['dst_port'] = parseInt(connMatch[9], 10);
+    if (denyMatch) {
+      const act = denyMatch[1].toLowerCase();
+      fields['action'] = (act === 'deny' || act === 'denied') ? 'DENY' : 'ALLOW';
+      fields['proto'] = denyMatch[2];
+      fields['src_zone'] = denyMatch[3];
+      fields['src_ip'] = denyMatch[4];
+      fields['src_port'] = parseInt(denyMatch[5], 10);
+      fields['dst_zone'] = denyMatch[6];
+      fields['dst_ip'] = denyMatch[7];
+      fields['dst_port'] = parseInt(denyMatch[8], 10);
     }
   }
 

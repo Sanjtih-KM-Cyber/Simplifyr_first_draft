@@ -31,6 +31,7 @@ import {
   Trash2,
   Send,
   Lock,
+  XCircle,
 } from 'lucide-react';
 import {
   QuarantinedEvent,
@@ -195,6 +196,13 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
       `Batch Reprocess Complete: Promoted ${sameFingerprintIds.length} event(s) sharing fingerprint ${activeQuarantined.fingerprint.fingerprintHash}.`
     );
     setTimeout(() => setReprocessSuccessMessage(null), 6000);
+  };
+
+  // Discard / Reject drifted event without altering schemas
+  const handleDiscard = (id?: string) => {
+    const targetId = id || activeQuarantined?.id;
+    if (!targetId) return;
+    quarantineManager.discard(targetId);
   };
 
   // Inject a synthetic drift event for live testing
@@ -383,7 +391,7 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
 
             {/* Status Pills */}
             <div className="flex items-center gap-1 text-[10px] font-mono">
-              {(['ALL', 'QUARANTINED', 'PATCH_READY', 'REPROCESSED'] as const).map((st) => (
+              {(['ALL', 'QUARANTINED', 'PATCH_READY', 'REPROCESSED', 'DISCARDED'] as const).map((st) => (
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
@@ -450,6 +458,8 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                             : isReady
                             ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                            : item.status === 'DISCARDED'
+                            ? 'bg-zinc-800 text-zinc-400 border-zinc-700 line-through'
                             : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                         }`}
                       >
@@ -534,6 +544,17 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                     <span className="text-xs font-mono px-2 py-1 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
                       {activeQuarantined.diffResult.assessment}
                     </span>
+
+                    {activeQuarantined.status !== 'DISCARDED' && activeQuarantined.status !== 'REPROCESSED' && (
+                      <button
+                        onClick={() => handleDiscard()}
+                        className="flex items-center gap-1 text-xs font-mono px-2.5 py-1 rounded bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-300 border border-zinc-700 hover:border-rose-900/60 cursor-pointer transition-colors"
+                        title="Reject and discard event without registering schema changes"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Reject Event
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -590,6 +611,13 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                 </div>
                 <div className="p-3 bg-zinc-950 text-xs font-mono text-zinc-300 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
                   {activeQuarantined.event.raw}
+                </div>
+                <div className="px-3.5 py-1.5 bg-zinc-900/60 border-t border-zinc-800 flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="w-3 h-3 text-emerald-400" />
+                    SHA-256 Wire Seal: <span className="text-zinc-300 select-all">{activeQuarantined.event.provenance.sha256_hash}</span>
+                  </span>
+                  <span className="text-emerald-400 font-semibold">100% Cryptographically Lossless</span>
                 </div>
               </div>
 
@@ -732,9 +760,9 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-zinc-200">
-                      Gemini AI Remediation Service
+                      Local AI Remediation Service
                     </h3>
-                    <p className="text-[10px] text-zinc-400">gemini-3.8-flash (Prompt-Sandboxed)</p>
+                    <p className="text-[10px] text-zinc-400">Local Engine First • Gemini/Groq Fallbacks</p>
                   </div>
                 </div>
 
@@ -754,9 +782,20 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                   {/* Summary & Root Cause */}
                   <div className="p-3.5 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-2">
                     <div className="flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-purple-400 font-bold">
-                        Model: {activeQuarantined.aiAnalysis.modelUsed}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-purple-400 font-bold">
+                          Model: {activeQuarantined.aiAnalysis.modelUsed}
+                        </span>
+                        {activeQuarantined.aiAnalysis.engineTier === 'primary-local' || activeQuarantined.aiAnalysis.source?.includes('ollama') ? (
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-semibold">
+                            Local Engine
+                          </span>
+                        ) : activeQuarantined.aiAnalysis.source?.includes('fallback') ? (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-semibold">
+                            Cloud Fallback
+                          </span>
+                        ) : null}
+                      </div>
                       <span className="text-zinc-400">
                         {activeQuarantined.aiAnalysis.executionTimeMs}ms
                       </span>
@@ -834,7 +873,7 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                     </div>
                   </div>
 
-                  {/* 1-CLICK REPROCESS BUTTON */}
+                  {/* ACTION BUTTONS: REPROCESS OR DISCARD */}
                   <div className="space-y-2 pt-2">
                     <button
                       onClick={handleReprocess}
@@ -846,6 +885,17 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                         ? 'Reprocessing Event...'
                         : '1-Click: Apply Patch & Reprocess Event'}
                     </button>
+
+                    {activeQuarantined.status !== 'DISCARDED' && activeQuarantined.status !== 'REPROCESSED' && (
+                      <button
+                        onClick={() => handleDiscard()}
+                        className="w-full py-2 px-4 rounded-lg bg-zinc-900 hover:bg-rose-950/40 hover:text-rose-300 text-zinc-400 font-mono text-xs border border-zinc-800 hover:border-rose-900/50 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                        title="Reject and discard event without registering schema changes"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-zinc-500 hover:text-rose-400" />
+                        Reject & Discard Event
+                      </button>
+                    )}
 
                     <p className="text-[10px] text-zinc-400 text-center">
                       Registers {targetVersionInput} in Knowledge Registry, re-normalizes envelope,
@@ -862,7 +912,7 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                     </div>
                     <p className="text-[11px] text-zinc-400 leading-relaxed">
                       Simplifyr has pre-calculated canonical mappings for all unmapped tokens based
-                      on ULPF lexical heuristics. You can run Gemini 3.8 Flash for deep vendor
+                      on ULPF lexical heuristics. You can run local AI or Gemini for deep vendor
                       context or apply immediately:
                     </p>
                   </div>
@@ -896,15 +946,28 @@ export const Phase5DriftConsole: React.FC<Phase5DriftConsoleProps> = ({
                     ))}
                   </div>
 
-                  {/* 1-Click Reprocess */}
-                  <button
-                    onClick={handleReprocess}
-                    disabled={isReprocessing || editablePatches.length === 0}
-                    className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <Zap className="w-4 h-4" />
-                    Apply & Reprocess Now
-                  </button>
+                  {/* Action buttons */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleReprocess}
+                      disabled={isReprocessing || editablePatches.length === 0}
+                      className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <Zap className="w-4 h-4" />
+                      Apply & Reprocess Now
+                    </button>
+
+                    {activeQuarantined.status !== 'DISCARDED' && activeQuarantined.status !== 'REPROCESSED' && (
+                      <button
+                        onClick={() => handleDiscard()}
+                        className="w-full py-2 px-4 rounded-lg bg-zinc-900 hover:bg-rose-950/40 hover:text-rose-300 text-zinc-400 font-mono text-xs border border-zinc-800 hover:border-rose-900/50 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                        title="Reject and discard event without registering schema changes"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-zinc-500 hover:text-rose-400" />
+                        Reject & Discard Event
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

@@ -15,8 +15,8 @@ import {
   ShieldCheck,
   Settings,
   Play,
+  Radio,
   X,
-  PanelRight,
 } from 'lucide-react';
 import { GOLDEN_CORPUS } from '../../data/goldenCorpus.ts';
 
@@ -25,7 +25,6 @@ interface QuickActionPaletteProps {
   onClose: () => void;
   onNavigate: (route: string) => void;
   onSelectSample?: (sampleRaw: string) => void;
-  onToggleDock?: () => void;
 }
 
 export const QuickActionPalette: React.FC<QuickActionPaletteProps> = ({
@@ -33,7 +32,6 @@ export const QuickActionPalette: React.FC<QuickActionPaletteProps> = ({
   onClose,
   onNavigate,
   onSelectSample,
-  onToggleDock,
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -60,78 +58,58 @@ export const QuickActionPalette: React.FC<QuickActionPaletteProps> = ({
       run: () => onNavigate('dashboard'),
     },
     {
-      id: 'nav-sources',
-      title: 'Perimeter Sources',
+      id: 'nav-ingest',
+      title: 'Connect & Ingest Logs',
       category: 'Navigation',
-      hint: 'Manage log sources, devices, and connection status',
-      icon: Server,
+      hint: 'Connect live syslog streams, send batch logs via HTTP Webhook, or drop log files',
+      icon: Radio,
       shortcut: '2',
+      run: () => onNavigate('ingest'),
+    },
+    {
+      id: 'nav-sources',
+      title: 'Sources & Onboarding',
+      category: 'Navigation',
+      hint: 'Manage connected appliances and onboard new devices via log samples',
+      icon: Server,
+      shortcut: '3',
       run: () => onNavigate('sources'),
     },
     {
       id: 'nav-events',
-      title: 'Event Explorer & Stream',
+      title: 'Event Explorer',
       category: 'Navigation',
-      hint: 'Inspect live perimeter stream with 5-tab forensic details',
+      hint: 'Inspect live perimeter events across [Raw], [Parsed], [Normalized], and [Output]',
       icon: Database,
       shortcut: '3',
       run: () => onNavigate('events'),
     },
     {
       id: 'nav-drift',
-      title: 'Drift & Quarantine Chamber',
+      title: 'Schema Drift & AI',
       category: 'Navigation',
-      hint: 'Zero-day drift isolation, Gemini AI analysis, and hot-patching',
+      hint: 'Zero-day drift isolation, AI explanations, and human approval',
       icon: AlertTriangle,
       shortcut: '4',
       run: () => onNavigate('drift'),
     },
     {
-      id: 'nav-mappings',
-      title: 'Field Mappings & Knowledge',
+      id: 'nav-outputs',
+      title: 'Custom Output Schema & Profiles',
       category: 'Navigation',
-      hint: 'Vendor rules, semantic transformations, and ECS targets',
+      hint: 'Build custom schemas, configure SOC presets (Triage, Incident, Intel, ML), and rename keys',
       icon: GitBranch,
       shortcut: '5',
-      run: () => onNavigate('mappings'),
-    },
-    {
-      id: 'nav-workbench',
-      title: 'Normalizer Workbench',
-      category: 'Navigation',
-      hint: 'Interactive testbed for custom or sample logs',
-      icon: Terminal,
-      shortcut: '6',
-      run: () => onNavigate('workbench'),
-    },
-    {
-      id: 'nav-verification',
-      title: 'Golden Verification',
-      category: 'Navigation',
-      hint: 'Run automated end-to-end regression & cryptographic checks',
-      icon: ShieldCheck,
-      shortcut: '7',
-      run: () => onNavigate('verification'),
+      run: () => onNavigate('outputs'),
     },
     {
       id: 'nav-settings',
-      title: 'Settings',
+      title: 'System Settings',
       category: 'Navigation',
-      hint: 'Configure database, streaming topics, and AI models',
+      hint: 'Configure AI engine reasoning, retention policies, and endpoints',
       icon: Settings,
-      shortcut: '8',
+      shortcut: 'S',
       run: () => onNavigate('settings'),
-    },
-    {
-      id: 'action-inspector-dock',
-      title: 'Toggle Inspector Dock (Concept A)',
-      category: 'Operational Tools',
-      hint: 'Slide out side-cockpit for live event forensics, AI drift studio, and parser scratchpad',
-      icon: PanelRight,
-      shortcut: 'i',
-      run: () => {
-        if (onToggleDock) onToggleDock();
-      },
     },
     // Golden samples
     ...GOLDEN_CORPUS.map((s) => ({

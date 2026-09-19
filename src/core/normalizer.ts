@@ -313,11 +313,27 @@ export function normalizeEvent(
     }
   }
 
-  if (!canonical.source.ip && parsed.fields.src) {
-    canonical.source.ip = String(parsed.fields.src);
+  if (!canonical.source.ip) {
+    const srcVal = parsed.fields.src_ip || parsed.fields.src || parsed.fields.source_ip || parsed.fields.srcip || parsed.fields.saddr;
+    if (srcVal) canonical.source.ip = String(srcVal);
   }
-  if (!canonical.destination.ip && parsed.fields.dst) {
-    canonical.destination.ip = String(parsed.fields.dst);
+  if (!canonical.destination.ip) {
+    const dstVal = parsed.fields.dst_ip || parsed.fields.dst || parsed.fields.destination_ip || parsed.fields.dstip || parsed.fields.daddr;
+    if (dstVal) canonical.destination.ip = String(dstVal);
+  }
+  if (!canonical.source.port && (parsed.fields.src_port || parsed.fields.spt || parsed.fields.sport)) {
+    const p = Number(parsed.fields.src_port || parsed.fields.spt || parsed.fields.sport);
+    if (!isNaN(p)) canonical.source.port = p;
+  }
+  if (!canonical.destination.port && (parsed.fields.dst_port || parsed.fields.dpt || parsed.fields.dport)) {
+    const p = Number(parsed.fields.dst_port || parsed.fields.dpt || parsed.fields.dport);
+    if (!isNaN(p)) canonical.destination.port = p;
+  }
+  if (canonical.network.action === 'UNKNOWN' && (parsed.fields.action || parsed.fields.act)) {
+    canonical.network.action = normalizeAction(parsed.fields.action || parsed.fields.act);
+  }
+  if (canonical.network.protocol === 'OTHER' && (parsed.fields.proto || parsed.fields.protocol)) {
+    canonical.network.protocol = normalizeProtocol(parsed.fields.proto || parsed.fields.protocol);
   }
 
   return {

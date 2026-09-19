@@ -30,6 +30,7 @@ import {
   Play,
   Sparkles,
   UploadCloud,
+  Radio,
 } from 'lucide-react';
 import { ProcessedStreamEvent } from '../../types.ts';
 import { formatRelativeTime, getStatusColor, formatBytes } from '../../lib/utils.ts';
@@ -135,16 +136,18 @@ export const EventsPage: React.FC<EventsPageProps> = ({
             variant={isStreamRunning ? 'outline' : 'secondary'}
             size="sm"
             onClick={onToggleStream}
+            title={isStreamRunning ? 'Pause the diagnostic sandbox pulse' : 'Pulse diagnostic sandbox telemetry'}
+            className="text-xs font-mono"
           >
             {isStreamRunning ? (
               <>
                 <Pause className="mr-1.5 h-3.5 w-3.5 text-amber-400" />
-                Pause Ingestion
+                Pause Pulse
               </>
             ) : (
               <>
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                Resume Stream
+                <Radio className="mr-1.5 h-3.5 w-3.5 text-zinc-400" />
+                Sandbox Pulse
               </>
             )}
           </Button>
@@ -153,10 +156,10 @@ export const EventsPage: React.FC<EventsPageProps> = ({
             variant="secondary"
             size="sm"
             onClick={onInjectSingleEvent}
-            title="Inject a real perimeter log pulse"
+            title="Inject a single test perimeter log into the pipeline"
           >
             <Sparkles className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
-            Inject Pulse
+            Inject 1 Event
           </Button>
 
           <Button

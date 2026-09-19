@@ -7,13 +7,11 @@ import React, { useState } from 'react';
 import {
   Menu,
   Bell,
-  Sparkles,
   Command,
   HelpCircle,
-  ShieldCheck,
   CheckCircle,
   AlertTriangle,
-  PanelRight,
+  UploadCloud,
 } from 'lucide-react';
 import { Button } from '../ui/button.tsx';
 import { Badge } from '../ui/badge.tsx';
@@ -23,23 +21,20 @@ export interface HeaderProps {
   onOpenMobileMenu: () => void;
   onOpenShortcuts: () => void;
   onOpenCommandPalette?: () => void;
-  onInjectPulse: () => void;
-  isStreamRunning: boolean;
-  onToggleStream: () => void;
+  onOpenIngestModal: () => void;
   quarantinedCount: number;
-  isDockOpen?: boolean;
-  onToggleDock?: () => void;
-  hasSelectedEvent?: boolean;
 }
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
-  sources: 'Perimeter Sources',
+  ingest: 'Log Ingestion & Connectors',
+  sources: 'Sources & Onboarding',
   events: 'Event Explorer',
-  drift: 'Drift & Quarantine',
-  mappings: 'Field Mappings & Knowledge',
-  workbench: 'Normalizer Workbench',
-  verification: 'Golden Verification',
+  drift: 'Schema Drift & AI',
+  outputs: 'Custom Output Schema & Profiles',
+  mappings: 'Custom Output Schema & Profiles',
+  workbench: 'Sources & Onboarding',
+  verification: 'Pipeline Self-Test',
   settings: 'System Settings',
 };
 
@@ -48,13 +43,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMobileMenu,
   onOpenShortcuts,
   onOpenCommandPalette,
-  onInjectPulse,
-  isStreamRunning,
-  onToggleStream,
+  onOpenIngestModal,
   quarantinedCount,
-  isDockOpen = false,
-  onToggleDock,
-  hasSelectedEvent = false,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -79,65 +69,19 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Quick Pulse, Status Badge, Notifications, Shortcuts */}
+      {/* Right: Clean, quiet actions - Connect Logs, Notifications, Shortcuts */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick Pulse Button */}
+        {/* Direct Connect Logs Action */}
         <Button
-          variant="outline"
+          variant="emerald"
           size="sm"
-          onClick={onInjectPulse}
-          className="h-8 text-[11px] font-mono border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-200"
-          title="Inject 1 simulated perimeter telemetry event"
+          onClick={onOpenIngestModal}
+          className="h-8 text-[11px] font-mono shadow-sm bg-emerald-600 hover:bg-emerald-500 text-white font-medium cursor-pointer"
+          title="Connect live firewall stream, upload logs, or test payload"
         >
-          <Sparkles className="h-3 w-3 text-emerald-400 mr-1.5" />
-          <span className="hidden sm:inline">Inject Pulse</span>
+          <UploadCloud className="h-3.5 w-3.5 mr-1.5" />
+          <span>+ Connect Logs</span>
         </Button>
-
-        {/* Command Palette trigger */}
-        {onOpenCommandPalette && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenCommandPalette}
-            className="h-8 px-2 text-zinc-400 hover:text-zinc-200"
-            title="Open Command Palette (⌘K)"
-          >
-            <Command className="h-3.5 w-3.5 mr-1" />
-            <span className="font-mono text-[10px] hidden md:inline">⌘K</span>
-          </Button>
-        )}
-
-        {/* Shortcuts button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onOpenShortcuts}
-          className="h-8 w-8 text-zinc-400 hover:text-zinc-200"
-          title="Keyboard Shortcuts (?)"
-        >
-          <HelpCircle className="h-4 w-4" />
-        </Button>
-
-        {/* Concept A: Collapsible Inspector Dock Toggle */}
-        {onToggleDock && (
-          <Button
-            variant={isDockOpen ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={onToggleDock}
-            className={`h-8 px-2.5 text-xs font-mono border transition-all ${
-              isDockOpen
-                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25'
-                : 'text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-zinc-800'
-            }`}
-            title="Toggle Live Inspector Side-Dock"
-          >
-            <PanelRight className="h-3.5 w-3.5 mr-1.5" />
-            <span className="hidden md:inline">Inspector</span>
-            {hasSelectedEvent && !isDockOpen && (
-              <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            )}
-          </Button>
-        )}
 
         {/* Notifications Popover */}
         <div className="relative">

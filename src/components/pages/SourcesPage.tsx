@@ -4,28 +4,35 @@
  */
 
 import React, { useState } from 'react';
-import { Card, CardContent } from '../ui/card.tsx';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card.tsx';
 import { Button } from '../ui/button.tsx';
 import { Input } from '../ui/input.tsx';
 import { Badge } from '../ui/badge.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table.tsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog.tsx';
 import { Label } from '../ui/label.tsx';
+import { Textarea } from '../ui/textarea.tsx';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs.tsx';
 import {
   Plus,
   Search,
-  Trash2,
+  Server,
   Play,
   Pause,
-  ExternalLink,
-  Server,
-  Settings,
-  Shield,
-  Activity,
+  Copy,
+  Check,
   CheckCircle,
+  Sparkles,
+  Lock,
+  Terminal,
+  FileCode,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
-import { formatRelativeTime, getStatusColor } from '../../lib/utils.ts';
+import { formatRelativeTime } from '../../lib/utils.ts';
 import { GOLDEN_CORPUS } from '../../data/goldenCorpus.ts';
+import { processRawEventThroughPipeline } from '../../services/streamSimulator.ts';
+import { ProcessedStreamEvent } from '../../types.ts';
 
 export interface SourceDevice {
   id: string;
@@ -44,7 +51,7 @@ export interface SourceDevice {
   sample_raw?: string;
 }
 
-const INITIAL_SOURCES: SourceDevice[] = [
+export const INITIAL_SOURCES: SourceDevice[] = [
   {
     id: 'src-pa-01',
     name: 'Perimeter Firewall Primary',
@@ -56,8 +63,8 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'syslog_rfc5424',
     event_type: 'traffic',
     status: 'active',
-    last_event_at: new Date(Date.now() - 4000).toISOString(),
-    event_count: 84210,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[0]?.raw,
   },
@@ -72,8 +79,8 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'syslog_rfc3164',
     event_type: 'connection_teardown',
     status: 'active',
-    last_event_at: new Date(Date.now() - 8000).toISOString(),
-    event_count: 61920,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[1]?.raw,
   },
@@ -88,8 +95,8 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'keyvalue',
     event_type: 'forward_traffic',
     status: 'active',
-    last_event_at: new Date(Date.now() - 15000).toISOString(),
-    event_count: 42100,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[6]?.raw,
   },
@@ -104,8 +111,8 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'leef',
     event_type: 'network_drop',
     status: 'active',
-    last_event_at: new Date(Date.now() - 25000).toISOString(),
-    event_count: 19800,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[3]?.raw,
   },
@@ -120,8 +127,8 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'cef',
     event_type: 'intrusion_alert',
     status: 'active',
-    last_event_at: new Date(Date.now() - 32000).toISOString(),
-    event_count: 5310,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[4]?.raw,
   },
@@ -136,33 +143,112 @@ const INITIAL_SOURCES: SourceDevice[] = [
     format: 'json',
     event_type: 'egress_proxy',
     status: 'active',
-    last_event_at: new Date(Date.now() - 60000).toISOString(),
-    event_count: 31200,
+    last_event_at: new Date().toISOString(),
+    event_count: 0,
     error_count: 0,
     sample_raw: GOLDEN_CORPUS[5]?.raw,
   },
 ];
 
 interface SourcesPageProps {
-  onTestSampleInWorkbench?: (raw: string) => void;
+  initialWorkbenchPayload?: string;
+  onOpenVerification?: () => void;
 }
 
-export const SourcesPage: React.FC<SourcesPageProps> = ({ onTestSampleInWorkbench }) => {
+export const SourcesPage: React.FC<SourcesPageProps> = ({
+  initialWorkbenchPayload,
+  onOpenVerification,
+}) => {
+  const [activeTab, setActiveTab] = useState<'sources' | 'onboard'>(
+    initialWorkbenchPayload ? 'onboard' : 'sources'
+  );
   const [sources, setSources] = useState<SourceDevice[]>(INITIAL_SOURCES);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Modals state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // Detail Modal State
   const [selectedSourceForDetail, setSelectedSourceForDetail] = useState<SourceDevice | null>(null);
 
-  // Form state
-  const [newSourceName, setNewSourceName] = useState('');
-  const [newSourceVendor, setNewSourceVendor] = useState('Palo Alto Networks');
-  const [newSourceProduct, setNewSourceProduct] = useState('PA-3400 Series');
-  const [newSourceHost, setNewSourceHost] = useState('192.168.10.1');
-  const [newSourcePort, setNewSourcePort] = useState(514);
-  const [newSourceFormat, setNewSourceFormat] = useState('syslog_rfc5424');
+  // Interactive Onboarding State (Section 64)
+  const [onboardRaw, setOnboardRaw] = useState<string>(
+    initialWorkbenchPayload || GOLDEN_CORPUS[0]?.raw || ''
+  );
+  const [processedEvent, setProcessedEvent] = useState<ProcessedStreamEvent | null>(() => {
+    try {
+      return processRawEventThroughPipeline(initialWorkbenchPayload || GOLDEN_CORPUS[0]?.raw || '');
+    } catch {
+      return null;
+    }
+  });
+  const [inspectView, setInspectView] = useState<'raw' | 'parsed' | 'normalized' | 'output'>('output');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [hasRegistered, setHasRegistered] = useState(false);
+
+  const handleProcessOnboard = (text: string) => {
+    setOnboardRaw(text);
+    if (!text.trim()) {
+      setProcessedEvent(null);
+      return;
+    }
+    try {
+      const res = processRawEventThroughPipeline(text.trim());
+      setProcessedEvent(res);
+      setHasRegistered(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSelectFixture = (index: number) => {
+    const fixture = GOLDEN_CORPUS[index];
+    if (fixture) {
+      handleProcessOnboard(fixture.raw);
+    }
+  };
+
+  const handleRegisterAsSource = () => {
+    if (!processedEvent) return;
+    const vendorName = processedEvent.detection.vendor || 'Unknown Vendor';
+    const productName = processedEvent.detection.device_product || 'Perimeter Appliance';
+
+    const newSource: SourceDevice = {
+      id: `src-${Date.now().toString(36)}`,
+      name: `${productName} (${vendorName})`,
+      vendor: vendorName,
+      product: productName,
+      version: '1.0',
+      host: processedEvent.envelope.ingestion_source.ip_address || '10.0.0.1',
+      port: 514,
+      format: processedEvent.envelope.content_type,
+      event_type: processedEvent.detection.event_family || 'traffic',
+      status: 'active',
+      last_event_at: new Date().toISOString(),
+      event_count: 1,
+      error_count: 0,
+      sample_raw: onboardRaw,
+    };
+
+    setSources((prev) => [newSource, ...prev]);
+    setHasRegistered(true);
+    setTimeout(() => {
+      setActiveTab('sources');
+      setHasRegistered(false);
+    }, 1200);
+  };
+
+  const handleToggleStatus = (id: string) => {
+    setSources((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, status: s.status === 'active' ? 'inactive' : 'active' } : s
+      )
+    );
+  };
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1500);
+  };
 
   const filteredSources = sources.filter((s) => {
     const matchQuery =
@@ -174,283 +260,364 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onTestSampleInWorkbenc
     return matchQuery && matchStatus;
   });
 
-  const handleToggleStatus = (id: string) => {
-    setSources((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, status: s.status === 'active' ? 'inactive' : 'active' } : s
-      )
-    );
-  };
-
-  const handleDeleteSource = (id: string) => {
-    setSources((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  const handleCreateSource = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSourceName.trim()) return;
-
-    const newSource: SourceDevice = {
-      id: `src-${Date.now().toString(36)}`,
-      name: newSourceName.trim(),
-      vendor: newSourceVendor,
-      product: newSourceProduct,
-      version: 'v1.0',
-      host: newSourceHost,
-      port: Number(newSourcePort) || 514,
-      format: newSourceFormat,
-      event_type: 'traffic',
-      status: 'active',
-      last_event_at: new Date().toISOString(),
-      event_count: 0,
-      error_count: 0,
-      sample_raw: GOLDEN_CORPUS[0]?.raw,
-    };
-
-    setSources((prev) => [newSource, ...prev]);
-    setIsAddModalOpen(false);
-    setNewSourceName('');
-  };
-
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 font-sans">Sources</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 font-sans">
+            Sources & Onboarding
+          </h1>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Manage perimeter log sources, ingestion transports, and device connection status
+            ULPF Section 17 & 18: Connect perimeter devices, test raw log samples, and auto-generate semantic mappings.
           </p>
         </div>
-        <Button variant="emerald" size="sm" onClick={() => setIsAddModalOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Add Source
-        </Button>
-      </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-          <Input
-            placeholder="Search sources by name, vendor, IP..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg p-1 text-xs font-mono">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-              statusFilter === 'all' ? 'bg-zinc-800 text-zinc-100 font-semibold' : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            All Statuses
-          </button>
-          <button
-            onClick={() => setStatusFilter('active')}
-            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-              statusFilter === 'active' ? 'bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20' : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Active
-          </button>
-          <button
-            onClick={() => setStatusFilter('inactive')}
-            className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-              statusFilter === 'inactive' ? 'bg-zinc-800 text-zinc-300 font-semibold' : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Inactive
-          </button>
-        </div>
-      </div>
+        {/* Top Controls */}
+        <div className="flex items-center gap-2">
+          {onOpenVerification && (
+            <Button variant="outline" size="sm" onClick={onOpenVerification} className="text-xs">
+              <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-400" />
+              Run Self-Test
+            </Button>
+          )}
 
-      {/* Sources Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Source Name</TableHead>
-                <TableHead>Vendor / Product</TableHead>
-                <TableHead>Format</TableHead>
-                <TableHead>Event Type</TableHead>
-                <TableHead className="text-right">Events</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Telemetry</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSources.map((source) => (
-                <TableRow key={source.id}>
-                  <TableCell className="font-medium text-zinc-100">
-                    <div className="flex items-center gap-2">
-                      <Server className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                      <span>{source.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-zinc-300">
-                      <span className="font-medium">{source.vendor}</span>
-                      <span className="text-zinc-500 text-[11px] block">{source.product} ({source.version})</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-[10px] uppercase">
-                      {source.format}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-[10px] font-mono">
-                      {source.event_type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-zinc-200">
-                    {source.event_count.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${getStatusColor(source.status)}`}>
-                      {source.status.toUpperCase()}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-zinc-400 font-mono text-[11px]">
-                    {formatRelativeTime(source.last_event_at)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggleStatus(source.id)}
-                        title={source.status === 'active' ? 'Pause Source' : 'Resume Source'}
-                      >
-                        {source.status === 'active' ? (
-                          <Pause className="h-3.5 w-3.5 text-amber-400" />
-                        ) : (
-                          <Play className="h-3.5 w-3.5 text-emerald-400" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setSelectedSourceForDetail(source)}
-                        title="View Source Details"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteSource(source.id)}
-                        title="Delete Source"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="p-3 border-t border-zinc-800/80 text-xs text-zinc-500 flex items-center justify-between">
-            <span>Showing {filteredSources.length} configured perimeter sources</span>
-            <span className="font-mono text-[11px] text-emerald-400">All transports operational</span>
+          {/* Sub-Tab Navigation */}
+          <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1 text-xs font-mono">
+            <button
+              onClick={() => setActiveTab('sources')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'sources'
+                  ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-xs'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Server className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Active Sources ({sources.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('onboard')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'onboard'
+                  ? 'bg-zinc-800 text-zinc-100 font-semibold shadow-xs'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Plus className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Onboard & Test Log</span>
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Add Source Dialog */}
-      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Perimeter Source</DialogTitle>
-            <DialogDescription>
-              Register a firewall, NIDS sensor, or cloud gateway to receive telemetry.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCreateSource} className="space-y-3 text-xs">
-            <div>
-              <Label>Source Friendly Name *</Label>
+      {activeTab === 'sources' ? (
+        /* View 1: Connected Sources Table */
+        <div className="space-y-4">
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[220px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
               <Input
-                placeholder="e.g. DMZ Firewall 02"
-                value={newSourceName}
-                onChange={(e) => setNewSourceName(e.target.value)}
-                required
+                placeholder="Filter sources by name, vendor, or IP..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Vendor</Label>
-                <Input
-                  value={newSourceVendor}
-                  onChange={(e) => setNewSourceVendor(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Product Model</Label>
-                <Input
-                  value={newSourceProduct}
-                  onChange={(e) => setNewSourceProduct(e.target.value)}
-                />
-              </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-200 font-mono"
+            >
+              <option value="all">All States</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+            </select>
+          </div>
+
+          {/* Sources Table */}
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Source Appliance</TableHead>
+                    <TableHead>Vendor & Product</TableHead>
+                    <TableHead>Version</TableHead>
+                    <TableHead>Ingress Endpoint</TableHead>
+                    <TableHead>Format</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSources.map((src) => (
+                    <TableRow key={src.id} className="hover:bg-zinc-800/40">
+                      <TableCell className="font-medium text-zinc-200 font-sans">
+                        <div className="flex items-center gap-2">
+                          <Server className="h-4 w-4 text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-xs font-semibold block">{src.name}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">{src.id}</span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-zinc-300 font-medium block">{src.vendor}</span>
+                        <span className="text-[11px] text-zinc-500 font-mono">{src.product}</span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-zinc-400">
+                        {src.version}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-zinc-300">
+                        {src.host}:{src.port}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px] font-mono uppercase">
+                          {src.format.replace('_', ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={src.status === 'active' ? 'success' : 'secondary'}
+                          className="text-[10px]"
+                        >
+                          {src.status.toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setSelectedSourceForDetail(src)}
+                          >
+                            Details
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => handleToggleStatus(src.id)}
+                          >
+                            {src.status === 'active' ? (
+                              <Pause className="h-3 w-3 text-amber-400" />
+                            ) : (
+                              <Play className="h-3 w-3 text-emerald-400" />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* View 2: Interactive Onboarding & Log Tester (ULPF Section 64) */
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Input & Detection Panel */}
+            <div className="lg:col-span-6 space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                      <Terminal className="h-4 w-4 text-emerald-400" />
+                      <span>1. Provide Log Sample</span>
+                    </CardTitle>
+                    <span className="text-[11px] text-zinc-400 font-mono">Syslog, CEF, LEEF, JSON, KV</span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Quick Golden Samples */}
+                  <div>
+                    <label className="text-[10px] font-mono uppercase font-semibold text-zinc-400 mb-1.5 block">
+                      Load Representative Perimeter Sample:
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { name: 'Palo Alto (Syslog)', idx: 0 },
+                        { name: 'Cisco ASA (Syslog)', idx: 1 },
+                        { name: 'FortiGate (Key-Value)', idx: 6 },
+                        { name: 'Check Point (LEEF)', idx: 3 },
+                        { name: 'Snort 3 (CEF)', idx: 4 },
+                        { name: 'Cloud VPC (JSON)', idx: 5 },
+                      ].map((chip) => (
+                        <button
+                          key={chip.name}
+                          type="button"
+                          onClick={() => handleSelectFixture(chip.idx)}
+                          className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-300 hover:border-emerald-500/50 hover:text-emerald-400 transition-colors cursor-pointer"
+                        >
+                          {chip.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Textarea
+                    rows={6}
+                    value={onboardRaw}
+                    onChange={(e) => handleProcessOnboard(e.target.value)}
+                    placeholder="Paste any perimeter firewall, router, or gateway log line here..."
+                    className="font-mono text-xs text-zinc-200 bg-zinc-950 border-zinc-800 leading-relaxed"
+                  />
+
+                  {/* Auto-Detection Summary Banner */}
+                  {processedEvent && (
+                    <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-emerald-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-mono font-semibold text-emerald-400 flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Simplifyr Auto-Detection (Confidence: {((processedEvent.detection.vendor_confidence || 0.95) * 100).toFixed(0)}%)
+                        </span>
+                        <Badge variant="success" className="text-[9px] font-mono uppercase">
+                          {processedEvent.envelope.content_type}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-xs font-mono pt-1">
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">VENDOR</span>
+                          <span className="text-zinc-200 font-semibold">{processedEvent.detection.vendor}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">PRODUCT</span>
+                          <span className="text-zinc-200 font-semibold">{processedEvent.detection.device_product}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">FAMILY</span>
+                          <span className="text-zinc-200 font-semibold">{processedEvent.detection.event_family}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleProcessOnboard('')}
+                      className="text-xs"
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      variant="emerald"
+                      size="sm"
+                      disabled={!processedEvent || hasRegistered}
+                      onClick={handleRegisterAsSource}
+                      className="text-xs flex items-center gap-1.5"
+                    >
+                      {hasRegistered ? (
+                        <>
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-200" />
+                          Registered!
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-3.5 w-3.5" />
+                          Approve & Register Source
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Host / IP Address</Label>
-                <Input
-                  value={newSourceHost}
-                  onChange={(e) => setNewSourceHost(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Port</Label>
-                <Input
-                  type="number"
-                  value={newSourcePort}
-                  onChange={(e) => setNewSourcePort(Number(e.target.value))}
-                />
-              </div>
+            {/* Right: Live Conversion Inspector */}
+            <div className="lg:col-span-6 space-y-4">
+              <Card className="h-full flex flex-col">
+                <CardHeader className="pb-3 border-b border-zinc-800 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-zinc-200">
+                    2. Transformation Verification
+                  </CardTitle>
+                  <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-md p-0.5 text-[11px] font-mono">
+                    {(['output', 'normalized', 'parsed', 'raw'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setInspectView(mode)}
+                        className={`px-2 py-0.5 rounded capitalize transition-colors cursor-pointer ${
+                          inspectView === mode
+                            ? 'bg-zinc-800 text-emerald-400 font-semibold'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 bg-zinc-950 overflow-hidden">
+                  <div className="p-4">
+                    {processedEvent ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs font-mono text-zinc-400 pb-2 border-b border-zinc-900">
+                          <span className="flex items-center gap-1.5 text-emerald-400">
+                            <Lock className="h-3.5 w-3.5" />
+                            SHA-256: {processedEvent.envelope.sha256_hash.slice(0, 16)}...
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[10px]"
+                            onClick={() => {
+                              const content =
+                                inspectView === 'raw'
+                                  ? processedEvent.envelope.raw_payload
+                                  : JSON.stringify(
+                                      inspectView === 'parsed'
+                                        ? processedEvent.parsed
+                                        : inspectView === 'normalized'
+                                        ? processedEvent.canonical
+                                        : { event: processedEvent.canonical, provenance: processedEvent.provenance },
+                                      null,
+                                      2
+                                    );
+                              handleCopy(content, 'inspector');
+                            }}
+                          >
+                            {copiedKey === 'inspector' ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                            Copy
+                          </Button>
+                        </div>
+
+                        <pre className="font-mono text-xs text-zinc-300 overflow-auto max-h-[380px] leading-relaxed">
+                          {inspectView === 'raw'
+                            ? processedEvent.envelope.raw_payload
+                            : JSON.stringify(
+                                inspectView === 'parsed'
+                                  ? processedEvent.parsed
+                                  : inspectView === 'normalized'
+                                  ? processedEvent.canonical
+                                  : { event: processedEvent.canonical, provenance: processedEvent.provenance },
+                                null,
+                                2
+                              )}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="h-64 flex flex-col items-center justify-center text-zinc-500 text-xs font-mono">
+                        <Terminal className="h-8 w-8 mb-2 opacity-40" />
+                        <span>Paste a log sample on the left to inspect real-time transformation</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div>
-              <Label>Telemetry Format</Label>
-              <select
-                value={newSourceFormat}
-                onChange={(e) => setNewSourceFormat(e.target.value)}
-                className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100 font-mono"
-              >
-                <option value="syslog_rfc5424">Syslog (RFC 5424 / PAN-OS)</option>
-                <option value="syslog_rfc3164">Syslog (RFC 3164 / Cisco ASA)</option>
-                <option value="cef">CEF (Common Event Format)</option>
-                <option value="leef">LEEF (Log Event Extended Format)</option>
-                <option value="keyvalue">Key-Value Pairs (FortiOS)</option>
-                <option value="json">Structured JSON (Cloud VPC)</option>
-              </select>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAddModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="emerald">
-                Register Source
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Source Detail Drawer/Dialog */}
+      {/* Source Detail Dialog */}
       {selectedSourceForDetail && (
         <Dialog open={!!selectedSourceForDetail} onOpenChange={() => setSelectedSourceForDetail(null)}>
           <DialogContent className="max-w-xl">
@@ -477,36 +644,19 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onTestSampleInWorkbenc
                   <span className="text-zinc-200 font-mono font-medium uppercase">{selectedSourceForDetail.format}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 font-mono text-[10px] block">TOTAL EVENTS</span>
-                  <span className="text-zinc-200 font-mono font-medium">{selectedSourceForDetail.event_count.toLocaleString()}</span>
+                  <span className="text-zinc-500 font-mono text-[10px] block">EVENT FAMILY</span>
+                  <span className="text-zinc-200 font-mono font-medium">{selectedSourceForDetail.event_type}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 font-mono text-[10px] block">LAST TELEMETRY</span>
-                  <span className="text-emerald-400 font-mono font-medium">{formatRelativeTime(selectedSourceForDetail.last_event_at)}</span>
+                  <span className="text-zinc-500 font-mono text-[10px] block">REGISTERED AT</span>
+                  <span className="text-zinc-200 font-mono font-medium">{formatRelativeTime(selectedSourceForDetail.last_event_at)}</span>
                 </div>
               </div>
 
               {selectedSourceForDetail.sample_raw && (
-                <div>
-                  <div className="text-[11px] font-mono text-zinc-400 mb-1.5 flex items-center justify-between">
-                    <span>SAMPLE PAYLOAD FIXTURE</span>
-                    {onTestSampleInWorkbench && (
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-[11px]"
-                        onClick={() => {
-                          if (selectedSourceForDetail.sample_raw) {
-                            onTestSampleInWorkbench(selectedSourceForDetail.sample_raw);
-                            setSelectedSourceForDetail(null);
-                          }
-                        }}
-                      >
-                        Inspect in Workbench →
-                      </Button>
-                    )}
-                  </div>
-                  <pre className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-300 overflow-x-auto whitespace-pre-wrap max-h-36">
+                <div className="space-y-1.5">
+                  <span className="text-zinc-400 font-mono text-[10px] uppercase font-semibold">Representative Raw Payload</span>
+                  <pre className="p-3 rounded bg-zinc-950 border border-zinc-800 text-zinc-300 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap">
                     {selectedSourceForDetail.sample_raw}
                   </pre>
                 </div>
@@ -517,8 +667,17 @@ export const SourcesPage: React.FC<SourcesPageProps> = ({ onTestSampleInWorkbenc
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedSourceForDetail(null)}
+                onClick={() => {
+                  if (selectedSourceForDetail.sample_raw) {
+                    handleProcessOnboard(selectedSourceForDetail.sample_raw);
+                    setActiveTab('onboard');
+                  }
+                  setSelectedSourceForDetail(null);
+                }}
               >
+                Test in Onboarder
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setSelectedSourceForDetail(null)}>
                 Close
               </Button>
             </DialogFooter>

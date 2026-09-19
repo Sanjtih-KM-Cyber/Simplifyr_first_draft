@@ -350,7 +350,8 @@ export interface GeminiDriftAnalysisResponse {
   backwardsCompatible: boolean;
   executionTimeMs: number;
   modelUsed: string;
-  source: 'gemini-live' | 'deterministic-sandbox';
+  source: 'gemini-live' | 'deterministic-sandbox' | 'ollama-local' | 'gemini-cloud-fallback' | 'groq-cloud-fallback' | string;
+  engineTier?: 'primary-local' | 'cloud-fallback' | string;
   sandboxReport: PromptSandboxReport;
 }
 

@@ -8,13 +8,12 @@ import {
   LayoutDashboard,
   Server,
   Database,
-  GitBranch,
   AlertTriangle,
+  Layers,
   Settings,
-  Terminal,
   ShieldCheck,
   Zap,
-  Activity,
+  Radio,
 } from 'lucide-react';
 import { Badge } from '../ui/badge.tsx';
 
@@ -24,17 +23,16 @@ export interface SidebarProps {
   quarantinedCount?: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  onOpenVerification?: () => void;
 }
 
 const navigation = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, shortcut: '1' },
-  { id: 'sources', name: 'Sources', icon: Server, shortcut: '2' },
-  { id: 'events', name: 'Events', icon: Database, shortcut: '3' },
-  { id: 'drift', name: 'Drift & Quarantine', icon: AlertTriangle, shortcut: '4', hasBadge: true },
-  { id: 'mappings', name: 'Field Mappings', icon: GitBranch, shortcut: '5' },
-  { id: 'workbench', name: 'Normalizer Workbench', icon: Terminal, shortcut: '6' },
-  { id: 'verification', name: 'Golden Verification', icon: ShieldCheck, shortcut: '7' },
-  { id: 'settings', name: 'Settings', icon: Settings, shortcut: '8' },
+  { id: 'ingest', name: 'Connect & Ingest Logs', icon: Radio, shortcut: '2' },
+  { id: 'sources', name: 'Sources & Onboard', icon: Server, shortcut: '3' },
+  { id: 'events', name: 'Event Explorer', icon: Database, shortcut: '4' },
+  { id: 'drift', name: 'Schema Drift', icon: AlertTriangle, shortcut: '5', hasBadge: true },
+  { id: 'outputs', name: 'Custom Output Schema', icon: Layers, shortcut: '6' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   quarantinedCount = 0,
   isOpenMobile = false,
   onCloseMobile,
+  onOpenVerification,
 }) => {
   return (
     <>
@@ -75,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </Badge>
         </div>
 
-        {/* Navigation List */}
+        {/* Primary 5-Step Pipeline Navigation */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           <div className="px-2 py-1 text-[10px] font-mono font-semibold uppercase text-zinc-500 tracking-wider">
             Pipeline Operations
@@ -115,9 +114,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer Status Bar */}
-        <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 text-xs">
-          <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-[11px] font-mono">
+        {/* Sidebar Bottom: Settings & Verification */}
+        <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 space-y-2">
+          {/* Settings Link */}
+          <button
+            onClick={() => {
+              onNavigate('settings');
+              if (onCloseMobile) onCloseMobile();
+            }}
+            className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+              currentRoute === 'settings'
+                ? 'bg-zinc-800/90 text-zinc-100 font-semibold'
+                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Settings className="h-4 w-4 text-zinc-400" />
+              <span>Settings</span>
+            </div>
+            <kbd className="hidden lg:inline-block font-mono text-[10px] text-zinc-500 bg-zinc-900 border border-zinc-800 rounded px-1.5">
+              S
+            </kbd>
+          </button>
+
+          {/* Self-Test Status & Trigger */}
+          <button
+            onClick={() => {
+              if (onOpenVerification) onOpenVerification();
+            }}
+            className="w-full flex items-center justify-between p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 transition-colors text-[11px] font-mono text-left cursor-pointer"
+            title="Click to run Golden Verification Suite"
+          >
             <div className="flex items-center gap-1.5 text-zinc-300">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -125,8 +152,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <span>Sub-2ms SLA</span>
             </div>
-            <span className="text-emerald-400 font-semibold">100% Lossless</span>
-          </div>
+            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              100% Lossless
+            </span>
+          </button>
         </div>
       </aside>
     </>
